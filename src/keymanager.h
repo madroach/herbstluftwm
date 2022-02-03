@@ -18,6 +18,7 @@ class Completion;
  * Maintains the list of key bindings, and handles the grabbing/ungrabbing with
  * the help of XKeyGrabber
  */
+enum class GrabbedState { Grabbed, Included, Ungrabbed };
 class KeyManager : public Object {
 private:
     /*!
@@ -60,7 +61,7 @@ private:
     public:
         KeyCombo keyCombo;
         std::vector<std::string> cmd;
-        bool grabbed = false;
+        GrabbedState grabbed = GrabbedState::Ungrabbed;
     };
 
 public:

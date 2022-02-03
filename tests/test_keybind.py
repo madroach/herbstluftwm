@@ -316,3 +316,73 @@ def test_keybind_unknown_binding(hlwm):
 def test_empty_keysym(hlwm, command):
     hlwm.call_xfail([command, '', 'true']) \
         .expect_stderr('Must not be empty')
+
+
+def test_included_grab(hlwm, keyboard):
+    hlwm.call(['new_attr', 'string', 'my_x', 'initial'])
+    hlwm.call(['new_attr', 'string', 'my_any_x', 'initial'])
+    hlwm.call(['new_attr', 'string', 'my_release_x', 'initial'])
+
+    hlwm.call(['keybind', 'x', 'set_attr', 'my_x', 'press_x'])
+
+    keyboard.press('x')
+    assert hlwm.attr.my_x() == 'press_x'
+    assert hlwm.attr.my_any_x() == 'initial'
+    assert hlwm.attr.my_release_x() == 'initial'
+    hlwm.call(['set_attr', 'my_x', 'initial'])
+
+    hlwm.call(['keybind', 'Any-x', 'set_attr', 'my_any_x', 'press_any_x'])
+
+    keyboard.press('x')
+    assert hlwm.attr.my_x() == 'press_x'
+    assert hlwm.attr.my_any_x() == 'initial'
+    assert hlwm.attr.my_release_x() == 'initial'
+    hlwm.call(['set_attr', 'my_x', 'initial'])
+
+    keyboard.down('alt')
+    keyboard.press('x')
+    keyboard.up('alt')
+    assert hlwm.attr.my_x() == 'initial'
+    assert hlwm.attr.my_any_x() == 'press_any_x'
+    assert hlwm.attr.my_release_x() == 'initial'
+    hlwm.call(['set_attr', 'my_any_x', 'initial'])
+
+    hlwm.call(['keybind', 'Release-x', 'set_attr', 'my_release_x', 'release_x'])
+
+    keyboard.down('alt')
+    keyboard.down('x')
+    keyboard.up('alt')
+    keyboard.up('x')
+
+    assert hlwm.attr.my_x() == 'initial'
+    assert hlwm.attr.my_any_x() == 'press_any_x'
+    assert hlwm.attr.my_release_x() == 'release_x'
+    hlwm.call(['set_attr', 'my_any_x', 'initial'])
+    hlwm.call(['set_attr', 'my_release_x', 'initial'])
+
+    hlwm.call(['keyunbind', 'Any-x'])
+
+    keyboard.down('alt')
+    keyboard.press('x')
+    keyboard.up('alt')
+
+    assert hlwm.attr.my_x() == 'initial'
+    assert hlwm.attr.my_any_x() == 'initial'
+    assert hlwm.attr.my_release_x() == 'initial'
+
+    keyboard.press('x')
+
+    assert hlwm.attr.my_x() == 'press_x'
+    assert hlwm.attr.my_any_x() == 'initial'
+    assert hlwm.attr.my_release_x() == 'release_x'
+    hlwm.call(['set_attr', 'my_x', 'initial'])
+    hlwm.call(['set_attr', 'my_release_x', 'initial'])
+
+    hlwm.call(['keyunbind', 'x'])
+
+    keyboard.press('x')
+
+    assert hlwm.attr.my_x() == 'initial'
+    assert hlwm.attr.my_any_x() == 'initial'
+    assert hlwm.attr.my_release_x() == 'release_x'
+    hlwm.call(['set_attr', 'my_release_x', 'initial'])

@@ -24,6 +24,8 @@ const vector<KeyCombo::ModifierNameAndMask> ModifierCombo::modifierMasks = {
     { "Shift",      ShiftMask },
     { "Control",    ControlMask },
     { "Ctrl",       ControlMask },
+    { "Release",    HlwmReleaseMask },
+    { "Any",        AnyModifier },
 };
 
 ModifiersWithString::ModifiersWithString()
@@ -147,6 +149,12 @@ KeyCombo KeyCombo::fromString(const string& str) {
     combo.modifiers_ = mws.modifiers_;
     combo.keysym = keySymFromString(mws.suffix_);
     return combo;
+}
+
+bool KeyCombo::includes(const KeyCombo& other, unsigned int ignoremask) const {
+    ignoremask |= modifiers_ & AnyModifier ? ~HlwmReleaseMask : 0;
+    return keysym == other.keysym
+        && (modifiers_ & ~ignoremask) == (other.modifiers_ & ~ignoremask);
 }
 
 bool KeyCombo::operator==(const KeyCombo& other) const {

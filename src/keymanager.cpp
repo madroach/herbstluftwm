@@ -53,12 +53,26 @@ int KeyManager::addKeybindCommand(Input input, Output output) {
     // Make sure there is no existing binding with same keysym/modifiers
     removeKeyBinding(newBinding->keyCombo);
 
-    if (currentKeyMask_.allowsBinding(newBinding->keyCombo)
-        && currentKeysInactive_.allowsBinding(newBinding->keyCombo))
+    bool isAllowed = currentKeyMask_.allowsBinding(newBinding->keyCombo)
+                     && currentKeysInactive_.allowsBinding(newBinding->keyCombo);
+
+    newBinding->grabbed = GrabbedState::Ungrabbed;
+    for (auto& binding : binds) {
+        // here we don't care about isAllowed.
+        if (binding->keyCombo.includes(newBinding->keyCombo, HlwmReleaseMask)) {
+            newBinding->grabbed = GrabbedState::Included;
+        }
+        else if (isAllowed && newBinding->keyCombo.includes(binding->keyCombo, HlwmReleaseMask)) {
+            xKeyGrabber_.ungrabKeyCombo(binding->keyCombo);
+            binding->grabbed = GrabbedState::Included;
+        }
+    }
+
+    if (newBinding->grabbed == GrabbedState::Ungrabbed && isAllowed)
     {
         // Grab for events on this keycode
         xKeyGrabber_.grabKeyCombo(newBinding->keyCombo);
-        newBinding->grabbed = true;
+        newBinding->grabbed = GrabbedState::Grabbed;
     }
 
     // Add keybinding to list
@@ -98,13 +112,54 @@ int KeyManager::removeKeybindCommand(Input input, Output output) {
             return HERBST_INVALID_ARGUMENT;
         }
 
+        GrabbedState grabbed = GrabbedState::Ungrabbed;
+        for (auto& binding : binds) {
+            if (comboToRemove == binding->keyCombo) {
+                grabbed = binding->grabbed;
+                break;
+            }
+        }
+
         // Remove binding (or moan if none was found)
-        if (removeKeyBinding(comboToRemove)) {
-            regrabAll();
-        } else {
+        if (! removeKeyBinding(comboToRemove)) {
             output.perror() << "Key \"" << arg << "\" is not bound\n";
             return HERBST_INVALID_ARGUMENT;
         }
+
+        if (grabbed != GrabbedState::Grabbed) {
+            return HERBST_EXIT_SUCCESS;
+        }
+
+        xKeyGrabber_.ungrabKeyCombo(comboToRemove);
+
+        // Search for bindings that were included by comboToRemove and are now orphaned.
+        for (auto& orphan : binds) {
+            if (orphan->grabbed != GrabbedState::Included
+                    || ! comboToRemove.includes(orphan->keyCombo, HlwmReleaseMask)) {
+                continue;
+            }
+
+            orphan->grabbed = GrabbedState::Ungrabbed;
+
+            // Search for other bindings that include orphan
+            for (auto& includingBinding : binds) {
+                if (includingBinding->keyCombo.includes(orphan->keyCombo, HlwmReleaseMask)
+                        && includingBinding->grabbed == GrabbedState::Grabbed) {
+                    orphan->grabbed = GrabbedState::Included;
+                    break;
+                }
+            }
+
+            // Grab if still orphaned
+            bool isAllowed = currentKeyMask_.allowsBinding(orphan->keyCombo)
+                             && currentKeysInactive_.allowsBinding(orphan->keyCombo);
+            if (orphan->grabbed == GrabbedState::Ungrabbed && isAllowed) {
+                xKeyGrabber_.grabKeyCombo(orphan->keyCombo);
+                orphan->grabbed = GrabbedState::Grabbed;
+            }
+        }
+
+        //regrabAll();
     }
 
     return HERBST_EXIT_SUCCESS;
@@ -131,18 +186,18 @@ void KeyManager::removeKeybindCompletion(Completion &complete) {
 void KeyManager::handleKeyPress(XKeyEvent* ev) const {
     KeyCombo pressed = xKeyGrabber_.xEventToKeyCombo(ev);
 
-    auto found = std::find_if(binds.begin(), binds.end(),
-            [=](const unique_ptr<KeyBinding> &other) {
-                return pressed == other->keyCombo;
-            });
-    if (found != binds.end()) {
-        // execute the bound command
-        std::ostringstream discardedOutput;
-        auto& cmd = (*found)->cmd;
-        Input input(cmd.front(), {cmd.begin() + 1, cmd.end()});
-        // discard output, but forward errors to std::cerr
-        OutputChannels channels(cmd.front(), discardedOutput, std::cerr);
-        Commands::call(input, channels);
+    for (auto& binding : binds) {
+        if (binding->keyCombo.includes(pressed, 0)) {
+            // execute the bound command
+            std::ostringstream discardedOutput;
+            auto& cmd = binding->cmd;
+            Input input(cmd.front(), {cmd.begin() + 1, cmd.end()});
+            // discard output, but forward errors to std::cerr
+            OutputChannels channels(cmd.front(), discardedOutput, std::cerr);
+            Commands::call(input, channels);
+
+            break;
+        }
     }
 }
 
@@ -154,7 +209,7 @@ void KeyManager::regrabAll() {
 
     for (auto& binding : binds) {
         // grab precisely those again, that have been grabbed before
-        if (binding->grabbed) {
+        if (binding->grabbed == GrabbedState::Grabbed) {
             xKeyGrabber_.grabKeyCombo(binding->keyCombo);
         }
     }
@@ -200,12 +255,12 @@ void KeyManager::setActiveKeyMask(const KeyMask& keyMask, const KeyMask& keysIna
         auto name = binding->keyCombo.str();
         bool isAllowed = keysInactive.allowsBinding(binding->keyCombo)
                          && keyMask.allowsBinding(binding->keyCombo);
-        if (isAllowed && !binding->grabbed) {
+        if (isAllowed && binding->grabbed == GrabbedState::Ungrabbed) {
             xKeyGrabber_.grabKeyCombo(binding->keyCombo);
-            binding->grabbed = true;
-        } else if (!isAllowed && binding->grabbed) {
+            binding->grabbed = GrabbedState::Grabbed;
+        } else if (!isAllowed && binding->grabbed == GrabbedState::Grabbed) {
             xKeyGrabber_.ungrabKeyCombo(binding->keyCombo);
-            binding->grabbed = false;
+            binding->grabbed = GrabbedState::Ungrabbed;
         }
     }
     currentKeyMask_ = keyMask;
