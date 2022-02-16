@@ -68,8 +68,8 @@ XMainLoop::XMainLoop(XConnection& X, Root* root)
     handlerTable_[ EnterNotify       ] = EH(&XMainLoop::enternotify);
     handlerTable_[ Expose            ] = EH(&XMainLoop::expose);
     handlerTable_[ FocusIn           ] = EH(&XMainLoop::focusin);
-    handlerTable_[ KeyPress          ] = EH(&XMainLoop::key);
-    handlerTable_[ KeyRelease        ] = EH(&XMainLoop::key);
+    handlerTable_[ KeyPress          ] = EH(&XMainLoop::keypressOrRelease);
+    handlerTable_[ KeyRelease        ] = EH(&XMainLoop::keypressOrRelease);
     handlerTable_[ MapNotify         ] = EH(&XMainLoop::mapnotify);
     handlerTable_[ MapRequest        ] = EH(&XMainLoop::maprequest);
     handlerTable_[ MappingNotify     ] = EH(&XMainLoop::mappingnotify);
@@ -533,8 +533,8 @@ void XMainLoop::focusin(XFocusChangeEvent* event) {
     duringFocusIn_ = false;
 }
 
-void XMainLoop::key(XKeyEvent* event) {
-    //HSDebug("name is: KeyPress\n");
+void XMainLoop::keypressOrRelease(XKeyEvent* event) {
+    HSDebug("name is: KeyPress\n");
     root_->keys()->handleKeyPress(event);
 }
 

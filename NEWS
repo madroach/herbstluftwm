@@ -9,6 +9,8 @@ Current git version
 
   * Tabbed window titles in the 'max' layout algorithm (controllable via the
     'tabbed_max' setting)
+  * Key binds for release events.
+  * Binding to key with AnyModifier.
   * New decoration setting 'title_when' to control, when window titles and tabs
     are shown.
   * New decoration settings 'title_depth' and 'title_align'.
